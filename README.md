@@ -22,11 +22,13 @@ Same bases as the widget:
 
 ## Build
 
-Requirements: JDK 17 and an Android SDK (Android Studio works out of the box).
+Requirements: JDK 17, an Android SDK (Android Studio works out of the box) and
+a Python interpreter **≤ 3.12** for the build (3.13+ breaks Chaquopy's bundled
+pip). If your default `python3` is newer, point the build at one:
 
 ```bash
+export CHAQUOPY_BUILD_PYTHON=/path/to/python3.12
 ./gradlew assembleDebug     # app/build/outputs/apk/debug/
-./gradlew testDebugUnitTest # Python backend tests run on the JVM too (Chaquopy)
 ```
 
 The first build resolves pyhOn's dependencies against Chaquopy's Android wheel

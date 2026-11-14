@@ -26,7 +26,10 @@ android {
         chaquopy {
             defaultConfig {
                 version = "3.11"
-                buildPython = listOf("/home/cartu/tools/py312/bin/python3")
+                // CI: the runner's python3 (3.12 on ubuntu-24.04). Locally point
+                // CHAQUOPY_BUILD_PYTHON at a <=3.12 interpreter (3.13+ breaks
+                // Chaquopy's bundled pip: no `cgi` module).
+                buildPython = listOf(System.getenv("CHAQUOPY_BUILD_PYTHON") ?: "python3")
                 pip {
                     // pyhOn is vendored in src/main/python (its MQTT dependency awscrt
                     // has no Android wheel); these are its remaining dependencies.
