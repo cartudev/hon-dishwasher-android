@@ -18,6 +18,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Chaquopy's bundled pip needs a build python <= 3.12 (3.13+ removed `cgi`).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       # The GitHub runner already ships the Android SDK with licenses accepted.
       - name: Accept SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
