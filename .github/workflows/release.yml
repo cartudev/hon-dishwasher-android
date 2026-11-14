@@ -18,7 +18,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # The GitHub runner already ships the Android SDK with licenses accepted.
+      - name: Accept SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
 
       - name: Build release APK (debug-signed)
         run: ./gradlew assembleRelease --no-configuration-cache

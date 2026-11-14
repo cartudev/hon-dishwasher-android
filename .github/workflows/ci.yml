@@ -32,6 +32,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+
       - name: Assemble debug
         run: ./gradlew assembleDebug --no-configuration-cache
