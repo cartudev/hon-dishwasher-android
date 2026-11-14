@@ -13,6 +13,9 @@ class App : Application() {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
+        // Cache and cycle switches live in the app files dir, not ~/.config.
+        Python.getInstance().getModule("mobile_api")
+            .callAttr("bind_storage", filesDir.absolutePath)
     }
 }
 
@@ -47,6 +50,16 @@ object PythonApi {
         is JSONArray -> (0 until value.length()).map { unwrap(value.opt(it)) }
         else -> value
     }
+
+    fun catalog(): Map<String, Any?> = parse(api.callAttr("catalog"))
+
+    fun cached(): Map<String, Any?> = parse(api.callAttr("cached"))
+
+    fun setVisible(programId: String, visible: Boolean): Map<String, Any?> =
+        parse(api.callAttr("set_visible", programId, visible))
+
+    fun setChoice(programId: String, key: String, enabled: Boolean): Map<String, Any?> =
+        parse(api.callAttr("set_choice", programId, key, enabled))
 
     fun status(): Map<String, Any?> = parse(api.callAttr("status"))
 

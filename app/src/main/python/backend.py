@@ -464,16 +464,39 @@ def load_choices() -> dict[str, Any]:
     return {"options": options, "hidden": [str(program) for program in hidden]}
 
 
+def bind_storage(path: str) -> None:
+    """Point cache and choices at a writable app directory.
+
+    On Android, Path.home() is not the app files dir, so the desktop XDG path
+    either is not writable or does not survive. The UI calls this at startup.
+    """
+    global CONFIG_DIR, CONFIG_FILE, PROGRAMS_FILE, CACHE_FILE, CHOICES_FILE
+    CONFIG_DIR = Path(path) / "hon"
+    CONFIG_FILE = CONFIG_DIR / "config.json"
+    PROGRAMS_FILE = CONFIG_DIR / "programs.json"
+    CACHE_FILE = CONFIG_DIR / "last-inspect.json"
+    CHOICES_FILE = CONFIG_DIR / "choices.json"
+    # Java File, not pathlib: Chaquopy's Python FS does not always see the
+    # app files directory the same way the Android context does.
+    try:
+        from java.io import File
+        directory = File(str(CONFIG_DIR))
+        directory.mkdirs()
+    except Exception:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    reload_settings()
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def save_choices(choices: dict[str, Any]) -> None:
     try:
-        CHOICES_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = CHOICES_FILE.with_suffix(".json.tmp")
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            json.dump(choices, file, ensure_ascii=False)
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, CHOICES_FILE)
-        os.chmod(CHOICES_FILE, 0o600)
+        _write_json(CHOICES_FILE, choices)
     except OSError:
         pass
 
@@ -499,6 +522,7 @@ def set_option_choice(program_id: str, key: str, enabled: bool) -> dict[str, Any
         choices["options"][program_id] = for_program
     for_program[key] = enabled
     save_choices(choices)
+    _patch_cached_choices()
     return {"ok": True, "choices": choices}
 
 
@@ -511,6 +535,7 @@ def set_program_visible(program_id: str, visible: bool) -> dict[str, Any]:
         hidden.append(program_id)
     choices["hidden"] = hidden
     save_choices(choices)
+    _patch_cached_choices()
     return {"ok": True, "choices": choices}
 
 
@@ -672,16 +697,56 @@ async def inspect(email: str | None = None, password: str | None = None) -> dict
 def save_cache(state: dict[str, Any]) -> None:
     # Appliance data (no credentials): the app lists instantly on the next start.
     try:
-        CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = CACHE_FILE.with_suffix(".json.tmp")
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as cache:
-            json.dump(state, cache, ensure_ascii=False)
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, CACHE_FILE)
-        os.chmod(CACHE_FILE, 0o600)
+        _write_json(CACHE_FILE, state)
     except OSError:
         pass
+
+
+def _patch_cached_choices() -> None:
+    """Keep the saved inspect in step with switches changed after the query."""
+    try:
+        state = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(state, dict):
+        return
+    choices = load_choices()
+    state["choices"] = choices
+    profiles = state.get("profiles")
+    if isinstance(profiles, dict):
+        for program_id, info in profiles.items():
+            if not isinstance(info, dict):
+                continue
+            required = info.get("required")
+            if not isinstance(required, list):
+                continue
+            for option in required:
+                if isinstance(option, dict) and option.get("key"):
+                    option["enabled"] = choice_enabled(str(program_id), str(option["key"]))
+    save_cache(state)
+
+
+def catalog() -> dict[str, Any]:
+    """Programs and remembered switches. No network: available before the first query."""
+    choices = load_choices()
+    hidden = set(choices["hidden"])
+    programs = []
+    for program_id in SETTINGS["order"]:
+        program = SETTINGS["programs"][program_id]
+        programs.append({
+            "id": program_id,
+            "label": program["label"],
+            "visible": program_id not in hidden,
+            "required": [
+                {
+                    "key": option["key"],
+                    "label": option["label"],
+                    "enabled": choice_enabled(program_id, option["key"]),
+                }
+                for option in program["required"]
+            ],
+        })
+    return {"ok": True, "programs": programs}
 
 
 def cached_inspect() -> dict[str, Any]:
