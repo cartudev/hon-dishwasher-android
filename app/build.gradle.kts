@@ -40,7 +40,10 @@ android {
 
     buildTypes {
         release {
+            // Sideloading-friendly: signed with the debug key so the release APK
+            // installs on any device without a distribution keystore.
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build release APK (debug-signed)
+        run: ./gradlew assembleRelease --no-configuration-cache
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF#refs/tags/}"
+          cp app/build/outputs/apk/release/app-release.apk "hon-dishwasher-${version}.apk"
+          echo "file=hon-dishwasher-${version}.apk" >> "$GITHUB_ENV"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF#refs/tags/}"
+          gh release create "$version" "$file" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "hon-dishwasher $version" \
+            --notes "Android APK (universal: arm64-v8a + x86_64, debug-signed so it
+            sideloads directly). Install the file, open the widget's Settings and
+            fill in your hOn account. The first query takes ~30 s; after that the
+            app lists from its cache." \
+            --verify-tag
