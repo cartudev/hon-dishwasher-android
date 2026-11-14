@@ -20,14 +20,19 @@ object PythonApi {
         Python.getInstance().getModule("mobile_api")
     }
 
-    fun status(): Map<String, Any?> = api.callAttr("status").asMap()
+    private fun dictOf(result: PyObject): Map<String, Any?> =
+        (result.toJava(Map::class.java) as? Map<String, Any?>) ?: emptyMap()
+
+    fun diag(): Map<String, Any?> = dictOf(api.callAttr("diag"))
+
+    fun status(): Map<String, Any?> = dictOf(api.callAttr("status"))
 
     fun inspect(email: String, password: String): Map<String, Any?> =
-        api.callAttr("inspect", email, password).asMap()
+        dictOf(api.callAttr("inspect", email, password))
 
     fun start(programId: String, basket: String, confirm: String, email: String, password: String): Map<String, Any?> =
-        api.callAttr("start", programId, basket, confirm, email, password).asMap()
+        dictOf(api.callAttr("start", programId, basket, confirm, email, password))
 
     fun stop(confirm: String, email: String, password: String): Map<String, Any?> =
-        api.callAttr("stop", confirm, email, password).asMap()
+        dictOf(api.callAttr("stop", confirm, email, password))
 }

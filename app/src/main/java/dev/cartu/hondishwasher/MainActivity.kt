@@ -1,5 +1,6 @@
 package dev.cartu.hondishwasher
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,14 +46,15 @@ fun AppRoot() {
     var basket by remember { mutableStateOf("off") }
     var snapshot by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var status by remember { mutableStateOf("Loading…") }
-    var busy by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     fun refresh() {
         if (busy) return
         busy = true
         status = "Querying the appliance (read-only)…"
-        lifecycleScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             val result = runCatching {
                 PythonApi.inspect(Creds.email(context), Creds.password(context))
             }.getOrElse { mapOf("ok" to false, "error" to (it.message ?: "failed")) }
@@ -65,7 +67,18 @@ fun AppRoot() {
                     if (order.isNotEmpty() && selected !in order) selected = order.first()
                 } else {
                     snapshot = null
-                    status = result["error"]?.toString() ?: "failed"
+                    val diag = runCatching { PythonApi.diag() }.getOrNull()
+                    val detail = diag?.get("diag")?.let { d ->
+                        (d as? Map<*, *>)?.entries?.joinToString(" || ") { (k, v) -> "$k: ${v.toString().take(600)}" }
+                    } ?: ""
+                    status = (result["error"]?.toString() ?: "failed") +
+                        (if (detail.isNotEmpty()) " || DIAG $detail" else "")
+                    try {
+                        context.openFileOutput("diag.txt", Context.MODE_PRIVATE).use { out ->
+                            out.write(detail.toByteArray())
+                            out.write(("\n\n" + result.toString()).toByteArray())
+                        }
+                    } catch (_: Exception) {}
                 }
             }
         }
@@ -102,7 +115,7 @@ fun AppRoot() {
                     onStart = { confirm ->
                         busy = true
                         status = "Revalidating and starting…"
-                        lifecycleScope.launch(Dispatchers.IO) {
+                        scope.launch(Dispatchers.IO) {
                             val result = runCatching {
                                 PythonApi.start(selected, basket, confirm, Creds.email(context), Creds.password(context))
                             }.getOrElse { mapOf("ok" to false, "error" to (it.message ?: "failed")) }
@@ -119,7 +132,7 @@ fun AppRoot() {
                     onBack = { screen = Screen.Home },
                     onStop = { confirm ->
                         busy = true
-                        lifecycleScope.launch(Dispatchers.IO) {
+                        scope.launch(Dispatchers.IO) {
                             val result = runCatching {
                                 PythonApi.stop(confirm, Creds.email(context), Creds.password(context))
                             }.getOrElse { mapOf("ok" to false, "error" to (it.message ?: "failed")) }

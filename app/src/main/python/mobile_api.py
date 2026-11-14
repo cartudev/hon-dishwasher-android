@@ -20,6 +20,32 @@ def _run(coroutine):
     return asyncio.run(coroutine)
 
 
+import sys
+import traceback
+
+_diag: dict = {"sys_path": sys.path}
+for _module in ("aiohttp", "pyhon"):
+    try:
+        __import__(_module)
+    except Exception:
+        _diag[_module] = traceback.format_exc()
+
+try:
+    from pyhon import Hon  # noqa: F401 - the exact import connect_device performs
+except Exception:
+    _diag["pyhon.Hon"] = traceback.format_exc()
+
+
+def diag() -> dict:
+    # Device debugging: also drop the details to a file readable via run-as.
+    try:
+        from pathlib import Path
+        Path("diag.txt").write_text(repr(_diag), encoding="utf-8")
+    except Exception:
+        pass
+    return {"ok": True, "diag": _diag}
+
+
 def status() -> dict:
     return backend.config_status()
 

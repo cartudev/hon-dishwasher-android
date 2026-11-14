@@ -422,10 +422,12 @@ async def connect_device(email: str | None = None, password: str | None = None) 
         email = config["email"]
         password = get_secret(email)
     try:
-        hon = await Hon(config["email"], password).__aenter__()
-    except Exception:
+        hon = await Hon(email, password).__aenter__()
+    except Exception as error:
         password = ""
-        raise AppError("hOn no permitió iniciar sesión o consultar el aparato.", "hon_connection_failed")
+        # Surface the class and message (never sensitive data) so the front-end
+        # can show why the connection failed.
+        raise AppError(f"hOn no permitió iniciar sesión ({error.__class__.__name__}: {error}).", "hon_connection_failed")
     password = ""
     target = SETTINGS["target"]
     matches = [
