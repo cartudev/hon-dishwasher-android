@@ -12,8 +12,14 @@ confirm="INICIAR" / confirm="DETENER" exactly, like the CLI does.
 from __future__ import annotations
 
 import asyncio
+import json
 
 import backend
+
+
+def _json(payload) -> str:
+    # Kotlin parses this. None becomes JSON null; the bridge must not see raw dicts.
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _run(coroutine):
@@ -27,23 +33,23 @@ def _run(coroutine):
                 "error": "Falló la operación con hOn; no se mostrarán datos sensibles."}
 
 
-def status() -> dict:
-    return backend.config_status()
+def status() -> str:
+    return _json(backend.config_status())
 
 
-def inspect(email: str, password: str) -> dict:
-    return _run(backend.inspect(email, password))
+def inspect(email: str, password: str) -> str:
+    return _json(_run(backend.inspect(email, password)))
 
 
-def start(program_id: str, basket: str, confirm: str, email: str, password: str) -> dict:
+def start(program_id: str, basket: str, confirm: str, email: str, password: str) -> str:
     if confirm != "INICIAR":
-        return {"ok": False, "code": "confirmation_required",
-                "error": "Missing the explicit INICIAR confirmation; nothing was sent."}
-    return _run(backend.start_program(program_id, basket, email, password))
+        return _json({"ok": False, "code": "confirmation_required",
+                      "error": "Falta la confirmación INICIAR; no se envió nada."})
+    return _json(_run(backend.start_program(program_id, basket, email, password)))
 
 
-def stop(confirm: str, email: str, password: str) -> dict:
+def stop(confirm: str, email: str, password: str) -> str:
     if confirm != "DETENER":
-        return {"ok": False, "code": "confirmation_required",
-                "error": "Missing the explicit DETENER confirmation; nothing was sent."}
-    return _run(backend.stop_program(email, password))
+        return _json({"ok": False, "code": "confirmation_required",
+                      "error": "Falta la confirmación DETENER; no se envió nada."})
+    return _json(_run(backend.stop_program(email, password)))

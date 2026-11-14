@@ -426,9 +426,8 @@ async def connect_device(email: str | None = None, password: str | None = None) 
         hon = await Hon(email, password).__aenter__()
     except Exception as error:
         password = ""
-        # Surface the class and message (never sensitive data) so the front-end
-        # can show why the connection failed.
-        raise AppError(f"hOn no permitió iniciar sesión ({error.__class__.__name__}: {error}).", "hon_connection_failed")
+        # Class only. pyhOn's auth errors embed redirect URLs and response bodies.
+        raise AppError(f"hOn no permitió iniciar sesión ({error.__class__.__name__}).", "hon_connection_failed")
     password = ""
     target = SETTINGS["target"]
     matches = [

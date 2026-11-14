@@ -13,8 +13,8 @@ android {
         applicationId = "dev.cartu.hondishwasher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
 
         ndk {
             // arm64-v8a for phones; x86_64 for emulators.

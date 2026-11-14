@@ -4,6 +4,8 @@ import android.app.Application
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import org.json.JSONArray
+import org.json.JSONObject
 
 class App : Application() {
     override fun onCreate() {
@@ -14,35 +16,46 @@ class App : Application() {
     }
 }
 
-/** Calls into app/src/main/python (backend.py through mobile_api.py). */
+/**
+ * Calls into app/src/main/python. mobile_api returns JSON text, not a dict:
+ * Chaquopy types dict values as non-null PyObject, and Python None then crashes
+ * with "<get-value>(...) must not be null" the moment a live inspect comes back.
+ */
 object PythonApi {
     private val api: PyObject by lazy {
         Python.getInstance().getModule("mobile_api")
     }
 
-    /** Chaquopy 15's toJava(Map/HashMap) rejects plain dicts. Walk asMap/asList. */
-    private fun PyObject.toKotlin(): Any? = when (type().toString()) {
-        "<class 'NoneType'>" -> null
-        "<class 'bool'>" -> toBoolean()
-        "<class 'int'>" -> toLong()
-        "<class 'float'>" -> toDouble()
-        "<class 'str'>" -> toString()
-        "<class 'dict'>" -> asMap().entries.associate { it.key.toString() to it.value.toKotlin() }
-        "<class 'list'>" -> asList().map { it.toKotlin() }
-        else -> toString()
+    private fun parse(result: PyObject?): Map<String, Any?> {
+        val text = result?.toString()?.takeIf { it.isNotBlank() && it != "None" } ?: return emptyMap()
+        return JSONObject(text).toKotlinMap()
     }
 
-    private fun dictOf(result: PyObject): Map<String, Any?> =
-        result.toKotlin() as? Map<String, Any?> ?: emptyMap()
+    private fun JSONObject.toKotlinMap(): Map<String, Any?> {
+        val out = LinkedHashMap<String, Any?>()
+        val keys = keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            out[key] = unwrap(opt(key))
+        }
+        return out
+    }
 
-    fun status(): Map<String, Any?> = dictOf(api.callAttr("status"))
+    private fun unwrap(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> value.toKotlinMap()
+        is JSONArray -> (0 until value.length()).map { unwrap(value.opt(it)) }
+        else -> value
+    }
+
+    fun status(): Map<String, Any?> = parse(api.callAttr("status"))
 
     fun inspect(email: String, password: String): Map<String, Any?> =
-        dictOf(api.callAttr("inspect", email, password))
+        parse(api.callAttr("inspect", email, password))
 
     fun start(programId: String, basket: String, confirm: String, email: String, password: String): Map<String, Any?> =
-        dictOf(api.callAttr("start", programId, basket, confirm, email, password))
+        parse(api.callAttr("start", programId, basket, confirm, email, password))
 
     fun stop(confirm: String, email: String, password: String): Map<String, Any?> =
-        dictOf(api.callAttr("stop", confirm, email, password))
+        parse(api.callAttr("stop", confirm, email, password))
 }
