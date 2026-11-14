@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "target": {
+    "applianceType": "DW",
+    "model": "CF 6C4F1PS-12"
+  },
+  "programs": [
+    {
+      "id": "intensive",
+      "label": "Intensivo",
+      "aliases": ["intensive", "intensivo"],
+      "required": [
+        { "key": "intensive", "label": "Intensivo+" },
+        { "key": "extraDry", "label": "Extra Dry" },
+        { "key": "openDoor", "label": "Smart Door" }
+      ],
+      "basket": true
+    },
+    {
+      "id": "prewash",
+      "label": "Prelavado",
+      "aliases": ["prewash", "prelavado", "prelavaggio"],
+      "required": [{ "key": "openDoor", "label": "Smart Door" }],
+      "basket": true
+    }
+  ]
+}

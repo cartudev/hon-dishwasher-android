@@ -1,0 +1,69 @@
+plugins {
+    id("com.android.application")
+    id("com.chaquo.python")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+android {
+    namespace = "dev.cartu.hondishwasher"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "dev.cartu.hondishwasher"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "0.1.0"
+
+        ndk {
+            // arm64-v8a for phones; x86_64 for emulators.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+            // Needed by Chaquopy to build source packages (awscrt) for Android.
+            version = "27.2.12479018"
+        }
+
+        chaquopy {
+            defaultConfig {
+                version = "3.11"
+                buildPython = listOf("/home/cartu/tools/py312/bin/python3")
+                pip {
+                    // pyhOn is vendored in src/main/python (its MQTT dependency awscrt
+                    // has no Android wheel); these are its remaining dependencies.
+                    install("aiohttp")
+                    install("yarl")
+                    install("typing-extensions")
+                }
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
+    buildFeatures {
+        compose = true
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    implementation(composeBom)
+    implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+}
