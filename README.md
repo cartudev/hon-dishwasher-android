@@ -48,6 +48,6 @@ copy should travel together until it gets extracted into its own package.
 
 ## Status
 
-Scaffold: screens and Python bridge in place; the vendored pyhon imports and
-loads the menu. Next: validate the first build's Chaquopy wheel resolution and
-try the APK on a device. Not yet on Google Play — sideload the debug APK.
+Sideload the release APK (not on Play). Chaquopy's cp311 index only has
+`yarl` 1.9.3, so `aiohttp` is pinned to 3.9.1 — 3.10 imports `yarl.Query` and
+the app dies at startup with "pyhOn is not installed". MQTT stays a no-op.

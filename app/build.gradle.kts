@@ -13,8 +13,8 @@ android {
         applicationId = "dev.cartu.hondishwasher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         ndk {
             // arm64-v8a for phones; x86_64 for emulators.
@@ -31,10 +31,13 @@ android {
                 // Chaquopy's bundled pip: no `cgi` module).
                 buildPython = listOf(System.getenv("CHAQUOPY_BUILD_PYTHON") ?: "python3")
                 pip {
-                    // pyhOn is vendored in src/main/python (its MQTT dependency awscrt
-                    // has no Android wheel); these are its remaining dependencies.
-                    install("aiohttp")
-                    install("yarl")
+                    // pyhOn is vendored (awscrt has no Android wheel). Chaquopy's
+                    // cp311 index tops out at yarl 1.9.3, which has no `Query`.
+                    // aiohttp 3.10 imports that name and the app dies at startup
+                    // with "pyhOn is not installed". 3.9.1 is the newest wheel
+                    // that matches yarl 1.9.3.
+                    install("aiohttp==3.9.1")
+                    install("yarl==1.9.3")
                     install("typing-extensions")
                 }
             }

@@ -20,10 +20,20 @@ object PythonApi {
         Python.getInstance().getModule("mobile_api")
     }
 
-    private fun dictOf(result: PyObject): Map<String, Any?> =
-        (result.toJava(Map::class.java) as? Map<String, Any?>) ?: emptyMap()
+    /** Chaquopy 15's toJava(Map/HashMap) rejects plain dicts. Walk asMap/asList. */
+    private fun PyObject.toKotlin(): Any? = when (type().toString()) {
+        "<class 'NoneType'>" -> null
+        "<class 'bool'>" -> toBoolean()
+        "<class 'int'>" -> toLong()
+        "<class 'float'>" -> toDouble()
+        "<class 'str'>" -> toString()
+        "<class 'dict'>" -> asMap().entries.associate { it.key.toString() to it.value.toKotlin() }
+        "<class 'list'>" -> asList().map { it.toKotlin() }
+        else -> toString()
+    }
 
-    fun diag(): Map<String, Any?> = dictOf(api.callAttr("diag"))
+    private fun dictOf(result: PyObject): Map<String, Any?> =
+        result.toKotlin() as? Map<String, Any?> ?: emptyMap()
 
     fun status(): Map<String, Any?> = dictOf(api.callAttr("status"))
 

@@ -414,8 +414,9 @@ async def connect_device(email: str | None = None, password: str | None = None) 
     falls back to the local config + keyring."""
     try:
         from pyhon import Hon
-    except ImportError:
-        raise AppError("pyhOn is not installed.", "pyhon_missing")
+    except ImportError as error:
+        # Surface the real cause (which module failed) instead of swallowing it.
+        raise AppError(f"pyhOn import failed ({error.__class__.__name__}: {error}).", "pyhon_missing")
 
     if not (email and password):
         config = read_config()

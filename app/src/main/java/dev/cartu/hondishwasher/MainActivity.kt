@@ -1,6 +1,5 @@
 package dev.cartu.hondishwasher
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +31,32 @@ val Card = Color(0xFF16171d)
 val CardBorder = Color(0xFF26272e)
 val Text2 = Color(0xFF9aa0ab)
 val Accent = Color(0xFF7aa2ff)
+
+@Composable
+fun honFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    disabledTextColor = Text2,
+    cursorColor = Accent,
+    focusedContainerColor = Card,
+    unfocusedContainerColor = Card,
+    focusedBorderColor = Accent,
+    unfocusedBorderColor = CardBorder,
+    focusedLabelColor = Accent,
+    unfocusedLabelColor = Text2,
+)
+
+private val HonScheme = darkColorScheme(
+    primary = Accent,
+    onPrimary = Color.White,
+    background = Bg,
+    onBackground = Color.White,
+    surface = Card,
+    onSurface = Color.White,
+    surfaceVariant = Card,
+    onSurfaceVariant = Text2,
+    outline = CardBorder,
+)
 
 enum class Screen { Home, Program, Review, Settings, Stop }
 
@@ -53,7 +81,7 @@ fun AppRoot() {
     fun refresh() {
         if (busy) return
         busy = true
-        status = "Querying the appliance (read-only)…"
+        status = "Consultando el aparato (solo lectura)…"
         scope.launch(Dispatchers.IO) {
             val result = runCatching {
                 PythonApi.inspect(Creds.email(context), Creds.password(context))
@@ -62,23 +90,12 @@ fun AppRoot() {
                 busy = false
                 if (result["ok"] == true) {
                     snapshot = result
-                    status = "Appliance queried · read-only"
+                    status = "Aparato consultado · solo lectura"
                     val order = (result["profileOrder"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                     if (order.isNotEmpty() && selected !in order) selected = order.first()
                 } else {
                     snapshot = null
-                    val diag = runCatching { PythonApi.diag() }.getOrNull()
-                    val detail = diag?.get("diag")?.let { d ->
-                        (d as? Map<*, *>)?.entries?.joinToString(" || ") { (k, v) -> "$k: ${v.toString().take(600)}" }
-                    } ?: ""
-                    status = (result["error"]?.toString() ?: "failed") +
-                        (if (detail.isNotEmpty()) " || DIAG $detail" else "")
-                    try {
-                        context.openFileOutput("diag.txt", Context.MODE_PRIVATE).use { out ->
-                            out.write(detail.toByteArray())
-                            out.write(("\n\n" + result.toString()).toByteArray())
-                        }
-                    } catch (_: Exception) {}
+                    status = result["error"]?.toString() ?: "failed"
                 }
             }
         }
@@ -86,6 +103,7 @@ fun AppRoot() {
 
     LaunchedEffect(Unit) { refresh() }
 
+    MaterialTheme(colorScheme = HonScheme) {
     Surface(color = Bg) {
         Column(
             Modifier
@@ -114,14 +132,14 @@ fun AppRoot() {
                     onBack = { screen = Screen.Program },
                     onStart = { confirm ->
                         busy = true
-                        status = "Revalidating and starting…"
+                        status = "Revalidando y arrancando…"
                         scope.launch(Dispatchers.IO) {
                             val result = runCatching {
                                 PythonApi.start(selected, basket, confirm, Creds.email(context), Creds.password(context))
                             }.getOrElse { mapOf("ok" to false, "error" to (it.message ?: "failed")) }
                             withContext(Dispatchers.Main) {
                                 busy = false
-                                status = result["error"]?.toString() ?: "hOn accepted the start of $selected."
+                                status = result["error"]?.toString() ?: "hOn aceptó el inicio de $selected."
                                 if (result["ok"] == true) screen = Screen.Home
                                 refresh()
                             }
@@ -138,7 +156,7 @@ fun AppRoot() {
                             }.getOrElse { mapOf("ok" to false, "error" to (it.message ?: "failed")) }
                             withContext(Dispatchers.Main) {
                                 busy = false
-                                status = result["error"]?.toString() ?: "hOn accepted stopping the cycle."
+                                status = result["error"]?.toString() ?: "hOn aceptó detener el ciclo."
                                 if (result["ok"] == true) screen = Screen.Home
                                 refresh()
                             }
@@ -151,6 +169,7 @@ fun AppRoot() {
                 Text(status, fontSize = 12.sp, color = Text2)
             }
         }
+    }
     }
 }
 
@@ -165,20 +184,20 @@ fun HomeScreen(snapshot: Map<String, Any?>?, busy: Boolean, status: String, onSe
         Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(14.dp)).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("CYCLE IN PROGRESS", fontSize = 12.sp, color = Text2)
+                Text("CICLO EN CURSO", fontSize = 12.sp, color = Text2)
                 (snapshot?.get("program") as? String)?.let { Text(it.uppercase(), fontSize = 11.sp, color = Text2) }
             }
-            Text(if (remaining != null) "Quedan $remaining min" else "The appliance reports no remaining time",
+            Text(if (remaining != null) "Quedan $remaining min" else "El aparato no informa tiempo restante",
                 fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Accent)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRefresh, enabled = !busy) { Text("Refresh") }
+                Button(onClick = onRefresh, enabled = !busy) { Text("Actualizar") }
             }
         }
     }
 
     when {
-        order.isEmpty() && busy -> Text("Querying the appliance to list programs…", color = Text2)
-        order.isEmpty() && !busy -> Text("No appliance data; check the status below.", color = Text2)
+        order.isEmpty() && busy -> Text("Consultando el aparato para listar programas…", color = Text2)
+        order.isEmpty() && !busy -> Text("Sin datos del aparato; mirá el estado abajo.", color = Text2)
         else -> order.forEach { id ->
             val info = profiles[id] as? Map<*, *> ?: return@forEach
             val available = info["available"] == true
@@ -187,7 +206,7 @@ fun HomeScreen(snapshot: Map<String, Any?>?, busy: Boolean, status: String, onSe
                 .padding(14.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(info["label"]?.toString() ?: id, fontSize = 16.sp, color = Color.White)
-                    Text(if (available) "Available in the schema" else "Not available",
+                    Text(if (available) "Disponible en el esquema" else "No disponible",
                         fontSize = 12.sp, color = if (available) Accent else Text2)
                 }
             }
@@ -195,8 +214,8 @@ fun HomeScreen(snapshot: Map<String, Any?>?, busy: Boolean, status: String, onSe
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onRefresh, enabled = !busy) { Text("Refresh") }
-        OutlinedButton(onClick = onSettings) { Text("Settings") }
+        OutlinedButton(onClick = onRefresh, enabled = !busy) { Text("Actualizar") }
+        OutlinedButton(onClick = onSettings) { Text("Configuración") }
     }
 }
 
@@ -217,20 +236,20 @@ fun ProgramScreen(profiles: Any?, selected: String, basket: String, onBasket: (S
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(14.dp)).padding(14.dp)) {
-            Text("PROGRAM — ${info["label"]}", color = Color.White)
+            Text("PROGRAMA — ${info["label"]}", color = Color.White)
             Text(info["reason"]?.toString()?.ifBlank {
-                "hOn program code: ${info["code"]}"
+                "código de programa hOn: ${info["code"]}"
             } ?: "", fontSize = 13.sp, color = Text2)
         }
 
-        Text("REMEMBERED OPTIONS (SENT AS THE SWITCHES ARE)", fontSize = 12.sp, color = Text2)
+        Text("OPCIONES RECORDADAS (SE ENVÍAN COMO ESTÁN)", fontSize = 12.sp, color = Text2)
         options.forEach { option ->
             SwitchRow(option["label"]?.toString() ?: "", option["enabled"] == true) { }
         }
 
-        Text("HALF LOAD (OPTIONAL)", fontSize = 12.sp, color = Text2)
+        Text("MEDIA CARGA (OPCIONAL)", fontSize = 12.sp, color = Text2)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("off" to "None", "upper" to "Upper basket", "lower" to "Lower basket").forEach { (value, label) ->
+            listOf("off" to "Ninguna", "upper" to "Canasta superior", "lower" to "Canasta inferior").forEach { (value, label) ->
                 val allowed = value == "off" || value in basketChoices
                 Box(Modifier.background(if (basket == value && allowed) Accent else Card, RoundedCornerShape(15.dp))
                     .clickable(enabled = allowed) { onBasket(value) }
@@ -241,8 +260,8 @@ fun ProgramScreen(profiles: Any?, selected: String, basket: String, onBasket: (S
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("Back") }
-            Button(onClick = onReview, enabled = available) { Text("Review…") }
+            OutlinedButton(onClick = onBack) { Text("Volver") }
+            Button(onClick = onReview, enabled = available) { Text("Revisar…") }
         }
     }
 }
@@ -257,20 +276,20 @@ fun ReviewScreen(snapshot: Map<String, Any?>?, selected: String, basket: String,
         ?.filter { it["enabled"] == true }?.mapNotNull { it["label"]?.toString() }?.joinToString(" · ") ?: ""
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("REVIEW — NOTHING SENT YET", fontSize = 12.sp, color = Text2)
+        Text("REVISIÓN — TODAVÍA NO SE ENVIÓ NADA", fontSize = 12.sp, color = Text2)
         Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(14.dp)).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Program: ${info?.get("label")} (${info?.get("code") ?: "unconfirmed"})", color = Color.White)
-            Text("Options: $options", color = Color.White)
-            Text("Half load: $basket", color = Color.White)
-            Text("Remote control: ${if (remoteReady) "ready" else "not verified / not ready"}", color = Color.White)
+            Text("Programa: ${info?.get("label")} (${info?.get("code") ?: "sin confirmar"})", color = Color.White)
+            Text("Opciones: $options", color = Color.White)
+            Text("Media carga: $basket", color = Color.White)
+            Text("Control remoto: ${if (remoteReady) "listo" else "no verificado / no listo"}", color = Color.White)
         }
-        Text("Type INICIAR to enable sending", fontSize = 13.sp, color = Text2)
+        Text("Escribí INICIAR para habilitar el envío", fontSize = 13.sp, color = Text2)
         OutlinedTextField(value = confirm, onValueChange = { confirm = it },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = honFieldColors())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { onBack(); }) { Text("Cancel") }
-            Button(onClick = { onStart(confirm) }, enabled = confirm.trim() == "INICIAR") { Text("Start cycle") }
+            OutlinedButton(onClick = { onBack(); }) { Text("Cancelar") }
+            Button(onClick = { onStart(confirm) }, enabled = confirm.trim() == "INICIAR") { Text("Iniciar ciclo") }
         }
     }
 }
@@ -282,17 +301,20 @@ fun SettingsScreen(onBack: () -> Unit) {
     var password by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("SETTINGS — hOn ACCOUNT", fontSize = 12.sp, color = Text2)
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("hOn email") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Text("CONFIGURACIÓN — CUENTA hOn", fontSize = 12.sp, color = Text2)
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Correo hOn") },
+            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = honFieldColors())
         OutlinedTextField(value = password, onValueChange = { password = it },
-            label = { Text("Password (stored encrypted)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            label = { Text("Contraseña (se guarda cifrada)") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            colors = honFieldColors())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("Back") }
+            OutlinedButton(onClick = onBack) { Text("Volver") }
             Button(enabled = email.contains("@") && password.isNotEmpty(), onClick = {
                 Creds.save(context, email.trim(), password)
                 onBack()
-            }) { Text("Save credentials") }
+            }) { Text("Guardar") }
         }
     }
 }
@@ -304,18 +326,18 @@ fun StopScreen(snapshot: Map<String, Any?>?, onBack: () -> Unit, onStop: (String
     val code = snapshot?.get("pr_code")?.toString() ?: "?"
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("STOP — NOTHING SENT YET", fontSize = 12.sp, color = Text2)
+        Text("DETENER — TODAVÍA NO SE ENVIÓ NADA", fontSize = 12.sp, color = Text2)
         Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(14.dp)).padding(14.dp)) {
-            Text(if (remaining != null) "Quedan $remaining min" else "The appliance reports no remaining time",
+            Text(if (remaining != null) "Quedan $remaining min" else "El aparato no informa tiempo restante",
                 fontSize = 20.sp, color = Accent)
-            Text("Cycle prCode $code in progress", color = Color.White)
+            Text("Ciclo prCode $code en curso", color = Color.White)
         }
-        Text("Type DETENER to enable stopping", fontSize = 13.sp, color = Text2)
+        Text("Escribí DETENER para habilitar la parada", fontSize = 13.sp, color = Text2)
         OutlinedTextField(value = confirm, onValueChange = { confirm = it },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true, colors = honFieldColors())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("Back") }
-            Button(onClick = { onStop(confirm) }, enabled = confirm.trim() == "DETENER") { Text("Stop cycle") }
+            OutlinedButton(onClick = onBack) { Text("Volver") }
+            Button(onClick = { onStop(confirm) }, enabled = confirm.trim() == "DETENER") { Text("Detener ciclo") }
         }
     }
 }
