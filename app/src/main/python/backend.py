@@ -289,6 +289,15 @@ def bool_on(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def remote_control_on(appliance: Any) -> bool:
+    """The button on the machine is remoteCtrValid.
+
+    This Candy reports remoteActionable and remoteVisible as off even when the
+    official app can start a cycle. Requiring them blocks a ready appliance.
+    """
+    return bool_on(appliance.get("remoteCtrValid", None))
+
+
 def parameter_values(parameter: Any) -> set[str]:
     typology = str(getattr(parameter, "typology", ""))
     if typology == "range":
@@ -579,7 +588,7 @@ def live_state(appliance: Any) -> dict[str, Any]:
         "ok": True,
         "model": appliance.model_name,
         "remote": remote,
-        "remote_ready": all(remote.values()),
+        "remote_ready": remote_control_on(appliance),
         "door_status": None if door is None else str(door),
         "machine_mode": None if mode is None else str(mode),
         # `active` lo calcula pyhon del bloque activity (CYCLE en curso).
@@ -617,9 +626,8 @@ def cycle_state(appliance: Any) -> dict[str, Any]:
 async def stop_program(email: str | None = None, password: str | None = None) -> dict[str, Any]:
     hon, appliance = await connect_device(email, password)
     try:
-        remote = {key: appliance.get(key, None) for key in ("remoteCtrValid", "remoteActionable", "remoteVisible")}
-        if not all(bool_on(value) for value in remote.values()):
-            raise AppError("El control remoto no está habilitado/listo en el aparato.", "remote_not_ready")
+        if not remote_control_on(appliance):
+            raise AppError("El control remoto no está habilitado en el aparato.", "remote_not_ready")
         mode = appliance.get("machMode", None)
         if mode is None or str(mode) not in ACTIVE_MACHINE_MODES:
             raise AppError("El aparato no reporta un ciclo activo que detener.", "no_active_cycle")
@@ -639,9 +647,8 @@ def check_start_preconditions(appliance: Any, program_id: str, basket: str) -> t
         raise AppError("Opción de media carga no válida.", "basket_invalid")
     program = program_def(program_id)
 
-    remote = {key: appliance.get(key, None) for key in ("remoteCtrValid", "remoteActionable", "remoteVisible")}
-    if not all(bool_on(value) for value in remote.values()):
-        raise AppError("El control remoto no está habilitado/listo en el aparato.", "remote_not_ready")
+    if not remote_control_on(appliance):
+        raise AppError("El control remoto no está habilitado en el aparato.", "remote_not_ready")
 
     door = appliance.get("doorStatus", None)
     if door is not None and str(door).strip().lower() in {"1", "true", "open"}:
@@ -760,26 +767,42 @@ def cached_inspect() -> dict[str, Any]:
     return state
 
 
+def select_start_category(appliance: Any, start: Any, program_code: str) -> Any:
+    """Switch startProgram to this category and return that command.
+
+    pyhOn names the selector `program` only when the category contains
+    "PROGRAM". On this dishwasher the keys are `intensive` / `prewash`, so the
+    selector is `category`. Writing the name into prCode does not change
+    program.
+    """
+    settings = getattr(start, "available_settings", {}) or {}
+    selector = None
+    for name in ("program", "category"):
+        parameter = settings.get(name)
+        if parameter is not None and type(parameter).__name__ == "HonParameterProgram":
+            selector = parameter
+            break
+    if selector is not None:
+        selector.value = program_code
+    elif program_code in getattr(start, "categories", {}):
+        start.category = program_code
+    else:
+        raise AppError("El esquema no expone el selector de programa esperado.", "program_selector_missing")
+    selected = appliance.commands.get("startProgram")
+    if selected is None or getattr(selected, "category", None) != program_code:
+        raise AppError("No se pudo seleccionar el programa en el esquema.", "program_selector_missing")
+    return selected
+
+
 async def start_program(program_id: str, basket: str, email: str | None = None, password: str | None = None) -> dict[str, Any]:
     program = program_def(program_id)
     hon, appliance = await connect_device(email, password)
     try:
         base_command, _ = check_start_preconditions(appliance, program_id, basket)
-        available = base_command.available_settings
-        program_param = next(
-            (available.get(name) for name in ("program", "prCode") if available.get(name)),
-            None,
-        )
-        if program_param is None:
-            raise AppError("El esquema no expone el selector de programa esperado.", "program_selector_missing")
         program_code, _ = get_profile_category(base_command, program)
         if program_code is None:
             raise AppError("El programa dejó de estar disponible durante la preparación.", "program_missing")
-        program_param.value = program_code
-
-        command = appliance.commands.get("startProgram")
-        if command is None:
-            raise AppError("No se pudo seleccionar el comando startProgram.", "program_command_missing")
+        command = select_start_category(appliance, base_command, program_code)
         params = command.parameters
 
         for option in program["required"]:
@@ -809,7 +832,7 @@ async def start_program(program_id: str, basket: str, email: str | None = None, 
         # Guard against the category changing under us: serialize the selected profile's
         # command object, not the command reference obtained before pyhOn's category swap.
         selected = appliance.commands.get("startProgram")
-        if selected is None or selected.category != command.category:
+        if selected is None or getattr(selected, "category", None) != program_code:
             raise AppError("El comando cambió mientras se preparaba; no envié nada.", "command_changed")
         accepted = await selected.send()
         if not accepted:
