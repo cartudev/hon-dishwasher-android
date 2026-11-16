@@ -782,14 +782,17 @@ def select_start_category(appliance: Any, start: Any, program_code: str) -> Any:
         if parameter is not None and type(parameter).__name__ == "HonParameterProgram":
             selector = parameter
             break
+    categories = getattr(start, "categories", {}) or {}
     if selector is not None:
         selector.value = program_code
-    elif program_code in getattr(start, "categories", {}):
+    elif program_code in categories:
         start.category = program_code
     else:
         raise AppError("El esquema no expone el selector de programa esperado.", "program_selector_missing")
+    # Dict key is cleaned (`prewash`); the command category is the raw API name.
+    expected = categories.get(program_code)
     selected = appliance.commands.get("startProgram")
-    if selected is None or getattr(selected, "category", None) != program_code:
+    if selected is None or (expected is not None and selected is not expected):
         raise AppError("No se pudo seleccionar el programa en el esquema.", "program_selector_missing")
     return selected
 
@@ -832,7 +835,7 @@ async def start_program(program_id: str, basket: str, email: str | None = None, 
         # Guard against the category changing under us: serialize the selected profile's
         # command object, not the command reference obtained before pyhOn's category swap.
         selected = appliance.commands.get("startProgram")
-        if selected is None or getattr(selected, "category", None) != program_code:
+        if selected is not command:
             raise AppError("El comando cambió mientras se preparaba; no envié nada.", "command_changed")
         accepted = await selected.send()
         if not accepted:
